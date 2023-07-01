@@ -4,7 +4,6 @@ from xml.etree import ElementTree as ET
 from io import StringIO
 import pandas as pd
 import numpy as np
-from sdg import helpers
 
 class InputSdmx(InputBase):
     """Sources of SDG data that are SDMX format."""
@@ -18,15 +17,9 @@ class InputSdmx(InputBase):
                  import_names=True,
                  import_codes=False,
                  import_translation_keys=False,
-                 import_series_attributes=True,
-                 import_observation_attributes=True,
-                 dsd='https://registry.sdmx.org/ws/public/sdmxapi/rest/datastructure/IAEG-SDGs/SDG/latest/?format=sdmx-2.1&detail=full&references=children',
+                 dsd='https://unstats.un.org/sdgs/files/SDG_DSD.xml',
                  indicator_id_xpath=".//Annotation[AnnotationTitle='Indicator']/AnnotationText",
-                 indicator_name_xpath=".//Annotation[AnnotationTitle='IndicatorTitle']/AnnotationText",
-                 logging=None,
-                 column_map=None, code_map=None,
-                 meta_suffix=None,
-                 request_params=None):
+                 indicator_name_xpath=".//Annotation[AnnotationTitle='IndicatorTitle']/AnnotationText"):
         """Constructor for InputSdmx.
 
         Parameters
@@ -68,8 +61,6 @@ class InputSdmx(InputBase):
         indicator_name_xpath : string
             An xpath query to find the indicator name within each Series code
         """
-        InputBase.__init__(self, logging=logging, column_map=column_map,
-            code_map=code_map, request_params=request_params, meta_suffix=meta_suffix)
         if drop_dimensions is None:
             drop_dimensions = []
         if dimension_map is None:
@@ -85,18 +76,33 @@ class InputSdmx(InputBase):
         self.indicator_id_map = indicator_id_map
         self.import_names = import_names
         self.import_codes = import_codes
-        self.import_series_attributes = import_series_attributes
-        self.import_observation_attributes = import_observation_attributes
         # Also use deprecated import_translation_keys.
         if not import_codes and import_translation_keys:
             self.import_codes = import_translation_keys
         self.indicator_id_xpath = indicator_id_xpath
         self.indicator_name_xpath = indicator_name_xpath
         self.series_dimensions = {}
+        InputBase.__init__(self)
 
 
     def parse_xml(self, location, strip_namespaces=True):
-        return helpers.sdmx.parse_xml(location, request_params=self.request_params)
+        """Fetch and parse an XML file.
+
+        Parameters
+        ----------
+        location : string
+            Remote URL of the XML file or path to local file.
+        strip_namespaces : boolean
+            Whether or not to strip namespaces. This is helpful in cases where
+            different implementations may use different namespaces/prefixes.
+        """
+        xml = self.fetch_file(location)
+        it = ET.iterparse(StringIO(xml))
+        if strip_namespaces:
+            for _, el in it:
+                if '}' in el.tag:
+                    el.tag = el.tag.split('}', 1)[1]
+        return it.root
 
 
     def dimension_id_to_codelist_id(self, dimension_id):
@@ -272,10 +278,10 @@ class InputSdmx(InputBase):
         try:
             df['Value'] = pd.to_numeric(df['Value'], errors='raise')
         except KeyError as e:
-            self.warn('Indicator {inid} did not have a value column - inserting null values.', inid=indicator_id)
+            print('WARNING: Indicator ' + indicator_id + ' did not have a value column - inserting null values.')
             df['Value'] = np.nan
         except ValueError as e:
-            self.warn('Indicator {inid} has a non-numeric value: {value}', inid=indicator_id, value=str(e))
+            print('WARNING: Indicator ' + indicator_id + ' has a non-numeric value: ' + str(e))
         return df
 
 
@@ -357,12 +363,8 @@ class InputSdmx(InputBase):
     def execute(self, indicator_options):
         """Execute this input. Overrides parent."""
 
-        InputBase.execute(self, indicator_options)
         # Fetch the response from the SDMX endpoint.
-        try:
-            self.fetch_data()
-        except:
-            raise Exception('SDMX source could not be fetched: ' + self.source)
+        self.fetch_data()
 
         # SDMX divides the data into series, but we want to divide
         # the data into indicators. Indicators contain multiple series,

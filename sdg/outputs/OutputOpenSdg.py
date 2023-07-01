@@ -10,7 +10,7 @@ class OutputOpenSdg(OutputBase):
 
     def __init__(self, inputs, schema, output_folder='_site', translations=None,
         reporting_status_extra_fields=None, indicator_options=None,
-        indicator_downloads=None, logging=None, indicator_export_filename='all_indicators'):
+        indicator_downloads=None):
         """Constructor for OutputOpenSdg.
 
         Parameters
@@ -23,17 +23,13 @@ class OutputOpenSdg(OutputBase):
         indicator_downloads : list
             A list of dicts describing calls to the write_downloads() method of
             IndicatorDownloadService.
-        indicator_export_filename : string
-            A filename (without the extension) for the zipped indicator export.
         """
         if translations is None:
             translations = []
 
-        OutputBase.__init__(self, inputs, schema, output_folder, translations,
-                            indicator_options, logging=logging)
+        OutputBase.__init__(self, inputs, schema, output_folder, translations, indicator_options)
         self.reporting_status_grouping_fields = reporting_status_extra_fields
         self.indicator_downloads = indicator_downloads
-        self.indicator_export_filename = indicator_export_filename
 
 
     def build(self, language=None):
@@ -86,19 +82,13 @@ class OutputOpenSdg(OutputBase):
         status = status & sdg.json.write_json('all', all_meta, ftype='meta', site_dir=site_dir)
         status = status & sdg.json.write_json('all', all_headline, ftype='headline', site_dir=site_dir)
 
-        # Reporting status.
-        reporting_status_types = []
-        if self.schema.get('reporting_status') is not None:
-            status_values = self.schema.get_values('reporting_status')
-            value_translation = self.schema.get_value_translation('reporting_status')
-            reporting_status_types = [{'value': value, 'label': value_translation[value]} for value in status_values]
-        stats_reporting = sdg.stats.reporting_status(reporting_status_types, all_meta, self.reporting_status_grouping_fields)
+        stats_reporting = sdg.stats.reporting_status(self.schema, all_meta, self.reporting_status_grouping_fields)
         status = status & sdg.json.write_json('reporting', stats_reporting, ftype='stats', site_dir=site_dir)
 
         disaggregation_status_service = sdg.DisaggregationStatusService(site_dir, self.indicators, self.reporting_status_grouping_fields)
         disaggregation_status_service.write_json()
 
-        indicator_export_service = sdg.IndicatorExportService(site_dir, self.indicators, filename=self.indicator_export_filename)
+        indicator_export_service = sdg.IndicatorExportService(site_dir, self.indicators)
         indicator_export_service.export_all_indicator_data_as_zip_archive()
 
         # Write the indicator downloads.
@@ -153,11 +143,6 @@ class OutputOpenSdg(OutputBase):
         if indicator.has_name():
             minimum['indicator_name'] = indicator.get_name()
             minimum['graph_title'] = indicator.get_name()
-        # Or fall back to translation keys.
-        else:
-            translation_key = 'global_indicators.' + indicator.get_slug() + '-title'
-            minimum['indicator_name'] = translation_key
-            minimum['graph_title'] = translation_key
 
         return minimum
 
@@ -213,7 +198,7 @@ class OutputOpenSdg(OutputBase):
                 'description': 'JSON files containing metadata for the indicators',
                 'loop_indicators': True,
                 'endpoints': [
-                    '{language}/meta/{indicator_id}.json'
+                    '{language}/comb/{indicator_id}.json'
                 ]
             },
             {
@@ -221,7 +206,7 @@ class OutputOpenSdg(OutputBase):
                 'description': 'Zip files containing all indicators in CSV form',
                 'loop_indicators': False,
                 'endpoints': [
-                    '{language}/zip/' + self.indicator_export_filename + '.zip'
+                    '{language}/zip/all_indicators.zip'
                 ]
             },
             {

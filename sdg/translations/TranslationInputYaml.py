@@ -15,7 +15,7 @@ class TranslationInputYaml(TranslationInputBase):
     When importing, this class treats the YAML filename as the "group".
     """
 
-    def __init__(self, source='translations', logging=None):
+    def __init__(self, source='translations'):
         """Constructor for the TranslationInputBase class.
 
         Parameters
@@ -23,7 +23,8 @@ class TranslationInputYaml(TranslationInputBase):
         source : string
             The folder containing the YAML files.
         """
-        TranslationInputBase.__init__(self, source=source, logging=logging)
+        self.source = source
+        self.translations = {}
 
 
     def parse_yaml(self, folder):
@@ -36,7 +37,7 @@ class TranslationInputYaml(TranslationInputBase):
         """
         # Safety code for missing folders.
         if not os.path.isdir(folder):
-            self.warn('Warning: Could not import translations from missing folder "{folder}".', folder=folder)
+            print('Warning: Could not import translations from missing folder "%s".' % folder)
             return
 
         # Walk through the translation folder.
@@ -66,5 +67,4 @@ class TranslationInputYaml(TranslationInputBase):
 
 
     def execute(self):
-        TranslationInputBase.execute(self)
         self.parse_yaml(self.source)

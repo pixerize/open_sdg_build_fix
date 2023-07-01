@@ -24,12 +24,13 @@ class SchemaOutputOpenSdg(SchemaOutputBase):
             os.makedirs(output_folder, exist_ok=True)
         output_path = os.path.join(output_folder, filename)
 
-        # Convert the JSON Schema into a list of Prose-style fields.
         output = list()
+        jsonschema = self.schema.schema
+
+        # Convert the JSON Schema into a list of Prose-style fields.
         for key in self.schema.get_field_order():
-            field = self.schema.get(key)
-            if field is not None:
-                prose_field = self.jsonschema_field_to_prose(field)
+            if key in jsonschema['properties']:
+                prose_field = self.jsonschema_field_to_prose(jsonschema['properties'][key])
                 output.append({
                     'name': key,
                     'field': prose_field

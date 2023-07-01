@@ -3,14 +3,12 @@
 import os
 from git import Repo
 from urllib.request import urlopen
-from sdg.Loggable import Loggable
-from sdg import helpers
 
-class TranslationInputBase(Loggable):
+class TranslationInputBase:
     """A base class for importing translations."""
 
 
-    def __init__(self, source='', logging=None, request_params=None):
+    def __init__(self, source=''):
         """Constructor for the TranslationInputBase class.
 
         Parameters
@@ -18,11 +16,8 @@ class TranslationInputBase(Loggable):
         source : string
             The source of the translations (see subclass for details)
         """
-        Loggable.__init__(self, logging=logging)
-        self.request_params = request_params
         self.source = source
         self.translations = {}
-        self.executed = False
 
 
     def get_translations(self):
@@ -76,7 +71,23 @@ class TranslationInputBase(Loggable):
 
 
     def fetch_file(self, location):
-        return helpers.files.read_file(location, request_params=self.request_params)
+        """Fetch a file, either on disk, or on the Internet.
+
+        Parameters
+        ----------
+        location : String
+            Either an http address, or a path on disk
+        """
+        file = None
+        data = None
+        if location.startswith('http'):
+            file = urlopen(location)
+            data = file.read().decode('utf-8')
+        else:
+            file = open(location)
+            data = file.read()
+        file.close()
+        return data
 
 
     def clone_repo(self, repo_url, folder='temp', tag=None, branch=None):
@@ -101,13 +112,6 @@ class TranslationInputBase(Loggable):
             repo.git.checkout(tag)
 
 
-    def execute_once(self):
-        if self.executed == True:
-            return
-        self.execute()
-        self.executed = True
-
-
     def execute(self):
         """Fetch translations from source."""
-        self.debug('Starting translation input: {class_name}')
+        raise NotImplementedError

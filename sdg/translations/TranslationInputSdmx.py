@@ -3,7 +3,6 @@
 from xml.etree import ElementTree as ET
 from io import StringIO
 from sdg.translations import TranslationInputBase
-from sdg import helpers
 
 class TranslationInputSdmx(TranslationInputBase):
     """A class for importing translations from an SDMX DSD.
@@ -17,35 +16,37 @@ class TranslationInputSdmx(TranslationInputBase):
     attributes themselves, as the 'CONCEPT_NAME' key.
 
     Each translation is put into a group according to the dimension/attribute id.
-
-    Note that if you are using "dimension_map" in an SDMX input to rename columns,
-    you will need to use the same "dimension_map" here.
     """
-
-    def __init__(self, source='', dimension_map=None, logging=None,
-        request_params=None):
-        """Constructor for the TranslationInputSdmx class.
-
-        Parameters
-        ----------
-        source : string
-            Inherits from TranslationInputBase.
-        dimension_map : dict
-            Meant to correspond with dimension_map from SdmxInputSdmx.
-        """
-        if dimension_map is None:
-            dimension_map = {}
-        self.dimension_map = dimension_map
-        TranslationInputBase.__init__(self, source=source, logging=logging,
-            request_params=request_params)
 
 
     def parse_xml(self, location, strip_namespaces=True):
-        return helpers.sdmx.parse_xml(location, request_params=self.request_params)
+        """Fetch and parse an XML file.
+
+        Parameters
+        ----------
+        location : string
+            Remote URL of the XML file or path to local file.
+        strip_namespaces : boolean
+            Whether or not to strip namespaces. This is helpful in cases where
+            different implementations may use different namespaces/prefixes.
+        """
+        xml = self.fetch_file(location)
+        it = ET.iterparse(StringIO(xml))
+        if strip_namespaces:
+            for _, el in it:
+                if '}' in el.tag:
+                    el.tag = el.tag.split('}', 1)[1]
+                for attrib in list(el.attrib.keys()):
+                    if '}' in attrib:
+                        val = el.attrib[attrib]
+                        del el.attrib[attrib]
+                        attrib = attrib.split('}', 1)[1]
+                        el.attrib[attrib] = val
+
+        return it.root
 
 
     def execute(self):
-        TranslationInputBase.execute(self)
         dsd = self.parse_xml(self.source)
 
         dimension_tags = dsd.findall('.//Dimension')
@@ -61,10 +62,6 @@ class TranslationInputSdmx(TranslationInputBase):
                 # Not sure why this happens - possibly the "TimeDimension"?
                 continue
             tag_id = tag.attrib['id']
-            if tag_id in self.dimension_map:
-                tag_id = self.dimension_map[tag_id]
-                if tag_id == '':
-                    continue
             concept_id = tag.find('.//ConceptIdentity/Ref').attrib['id']
             concept_xpath = ".//Concept[@id='{}']"
             concept = dsd.find(concept_xpath.format(concept_id))
@@ -87,11 +84,6 @@ class TranslationInputSdmx(TranslationInputBase):
             for code in codes:
                 translations = code.findall('Name')
                 code_key = code.attrib['id']
-                combined_for_dimension_map = tag_id + '|' + code_key
-                if combined_for_dimension_map in self.dimension_map:
-                    code_key = self.dimension_map[combined_for_dimension_map]
-                    if code_key == '':
-                        continue
                 for translation in translations:
                     if 'lang' not in translation.attrib:
                         continue

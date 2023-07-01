@@ -13,8 +13,7 @@ class OutputGeoJson(OutputBase):
     def __init__(self, inputs, schema, output_folder='_site', translations=None,
         geojson_file='regions.geojson', name_property='name', id_property='id',
         id_column='GeoCode', output_subfolder='regions', filename_prefix='indicator_',
-        exclude_columns=None, id_replacements=None, indicator_options=None,
-        logging=None):
+        exclude_columns=None, id_replacements=None, indicator_options=None):
         """Constructor for OutputGeoJson.
 
         Parameters
@@ -60,8 +59,7 @@ class OutputGeoJson(OutputBase):
         if id_replacements is None:
             id_replacements = {}
 
-        OutputBase.__init__(self, inputs, schema, output_folder, translations,
-                            indicator_options, logging=logging)
+        OutputBase.__init__(self, inputs, schema, output_folder, translations, indicator_options)
         self.geojson_file = geojson_file
         self.name_property = name_property
         self.id_property = id_property
@@ -133,7 +131,7 @@ class OutputGeoJson(OutputBase):
             if not self.indicator_has_geocodes(indicator):
                 continue
 
-            series_by_geocodes = self.get_series_by_geocodes(indicator, language=language)
+            series_by_geocodes = self.get_series_by_geocodes(indicator)
             geometry_data = copy.deepcopy(self.geometry_data)
 
             # Loop through the features.
@@ -159,10 +157,8 @@ class OutputGeoJson(OutputBase):
                 # Normalize the id and name properties.
                 geometry_data['features'][index]['properties']['name'] = feature_name
                 geometry_data['features'][index]['properties']['geocode'] = feature['properties'][self.id_property]
-                if self.name_property != 'name':
-                    del geometry_data['features'][index]['properties'][self.name_property]
-                if self.id_property != 'geocode':
-                    del geometry_data['features'][index]['properties'][self.id_property]
+                del geometry_data['features'][index]['properties'][self.name_property]
+                del geometry_data['features'][index]['properties'][self.id_property]
             # Finally write the updated GeoJSON file.
             filename = self.filename_prefix + indicator_id + '.geojson'
             filepath = os.path.join(target_folder, filename)
@@ -172,15 +168,13 @@ class OutputGeoJson(OutputBase):
         return status
 
 
-    def get_series_by_geocodes(self, indicator, language=None):
+    def get_series_by_geocodes(self, indicator):
         """Get a dict of lists of Series objects, keyed by geocode ids.
 
         Parameters
         ----------
         indicator : Indicator
             An instance of the Indicator class.
-        language : language
-            A specified language since each language is cached
 
         Returns
         -------
@@ -188,7 +182,7 @@ class OutputGeoJson(OutputBase):
             Lists of instances of the Series class, keyed by geocode id.
         """
         series_by_geocodes = {}
-        for series in indicator.get_all_series(language=language):
+        for series in indicator.get_all_series():
             if series.has_disaggregation(self.id_column):
                 geocode = series.get_disaggregation(self.id_column)
                 geocode = self.replace_geocode(geocode)

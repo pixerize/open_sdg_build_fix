@@ -1,6 +1,5 @@
 from .TranslationInputBase import TranslationInputBase
 from .TranslationInputSdmx import TranslationInputSdmx
-from .TranslationInputSdmxMsd import TranslationInputSdmxMsd
 from .TranslationInputYaml import TranslationInputYaml
 from .TranslationInputCsv import TranslationInputCsv
 from .TranslationInputSdgTranslations import TranslationInputSdgTranslations

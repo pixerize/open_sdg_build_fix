@@ -27,10 +27,9 @@ class SchemaInputOpenSdg(SchemaInputBase):
         # Convert the Prose.io metadata into JSON Schema.
         for field in config['prose']['metadata']['meta']:
             is_required = field['name'] in schema['required']
-            key = self.alter_key(field['name'])
             jsonschema_field = self.prose_field_to_jsonschema(field['field'], is_required)
-            schema['properties'][key] = jsonschema_field
-            self.add_item_to_field_order(key)
+            schema['properties'][field['name']] = jsonschema_field
+            self.add_item_to_field_order(field['name'])
 
         # And similarly, there are certain conditional validation checks.
         schema['allOf'] = [

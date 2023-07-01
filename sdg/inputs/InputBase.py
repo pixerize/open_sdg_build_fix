@@ -2,57 +2,20 @@ from urllib.request import urlopen
 import pandas as pd
 import numpy as np
 from sdg.Indicator import Indicator
-from sdg.Loggable import Loggable
-from sdg import helpers
 
-class InputBase(Loggable):
-    """Base class for sources of SDG data/metadata.
+class InputBase:
+    """Base class for sources of SDG data/metadata."""
 
-    logging: None or list
-        Type of logs to print, including 'warn' and 'debug'.
-    request_params : dict or None
-        Optional dict of parameters to be passed to remote file fetches.
-        Corresponds to the options passed to a urllib.request.Request.
-        @see https://docs.python.org/3/library/urllib.request.html#urllib.request.Request
-    column_map: string
-        Remote URL of CSV column mapping or path to local CSV column mapping file
-    code_map: string
-        Remote URL of CSV code mapping or path to local CSV code mapping file
-    meta_suffix: string
-        String to add to each metadata key. Intended usage is to allow identical
-        sets of metadata - one for global and one for national.
-    """
-
-    def __init__(self, logging=None, column_map=None, code_map=None, request_params=None,
-                 meta_suffix=None):
+    def __init__(self):
         """Constructor for InputBase."""
-        Loggable.__init__(self, logging=logging)
-        self.request_params = request_params
         self.indicators = {}
         self.data_alterations = []
         self.meta_alterations = []
-        self.last_executed_indicator_options = None
-        self.merged_indicators = None
-        self.previously_merged_inputs = []
-        self.num_previously_merged_inputs = 0
-        self.column_map = column_map
-        self.code_map = code_map
-        self.meta_suffix = meta_suffix
-
-
-    def execute_once(self, indicator_options):
-        # To avoid unnecessarily executing the same input multiple times,
-        # track the indicator options and skip execution if they did not
-        # change from the last time.
-        if self.last_executed_indicator_options is not None:
-            if indicator_options == self.last_executed_indicator_options:
-                return
-        self.last_executed_indicator_options = indicator_options
-        self.execute(indicator_options)
 
 
     def execute(self, indicator_options):
-        self.debug('Starting input: {class_name}')
+        """Fetch all data/metadata from source, fetching a list of indicators."""
+        raise NotImplementedError
 
 
     def get_row(self, year, value, disaggregations):
@@ -98,8 +61,6 @@ class InputBase(Loggable):
         cols = df.columns.tolist()
         cols.pop(cols.index('Year'))
         cols.pop(cols.index('Value'))
-        for col in cols:
-            df[col] = df[col].map(str, na_action='ignore')
         cols = ['Year'] + cols + ['Value']
         return df[cols]
 
@@ -116,17 +77,27 @@ class InputBase(Loggable):
         Dataframe
             The same dataframe with rearranged columns
         """
-        for col in df.columns:
-            for to_find in [None, "", "nan"]:
-                try:
-                    df[col].replace(to_replace={ to_find: np.NaN }, inplace=True)
-                except Exception as e:
-                    pass
-        return df
+        return df.replace([None, ""], np.NaN)
 
 
     def fetch_file(self, location):
-        return helpers.files.read_file(location, request_params=self.request_params)
+        """Fetch a file, either on disk, or on the Internet.
+
+        Parameters
+        ----------
+        location : String
+            Either an http address, or a path on disk
+        """
+        file = None
+        data = None
+        if location.startswith('http'):
+            file = urlopen(location)
+            data = file.read().decode('utf-8')
+        else:
+            file = open(location)
+            data = file.read()
+        file.close()
+        return data
 
 
     def normalize_indicator_id(self, indicator_id):
@@ -206,7 +177,7 @@ class InputBase(Loggable):
         """
         data = self.alter_data(data)
         meta = self.alter_meta(meta)
-        indicator = Indicator(indicator_id, name=name, data=data, meta=meta, options=options, logging=self.logging)
+        indicator = Indicator(indicator_id, name=name, data=data, meta=meta, options=options)
         self.indicators[indicator_id] = indicator
 
 
@@ -220,9 +191,6 @@ class InputBase(Loggable):
         # If empty or None, do nothing.
         if data is None or not isinstance(data, pd.DataFrame) or data.empty:
             return data
-        # Apply any mappings.
-        data = self.apply_column_map(data)
-        data = self.apply_code_map(data)
         # Perform any alterations on the data.
         for alteration in self.data_alterations:
             data = alteration(data)
@@ -240,18 +208,11 @@ class InputBase(Loggable):
         ---------
         meta : dict or None
         """
+        # If empty or None, do nothing.
         if not meta or meta is None:
-            if len(self.meta_alterations) > 0:
-                meta = {}
-            else:
-                return meta
+            return meta
         for alteration in self.meta_alterations:
             meta = alteration(meta)
-        if self.meta_suffix is not None:
-            for key in list(meta.keys()):
-                if not key.endswith(self.meta_suffix):
-                    meta[key + self.meta_suffix] = meta[key]
-                    del meta[key]
         return meta
 
 
@@ -275,71 +236,3 @@ class InputBase(Loggable):
             The alteration function.
         """
         self.meta_alterations.append(alteration)
-
-
-    def has_merged_indicators(self, inputs):
-        """Whether this is the first of a set of already-merged inputs.
-
-        Parameters
-        ----------
-        inputs : list
-            List of InputBase subclasses.
-
-
-        Returns
-        -------
-        boolean
-            Whether or not this input is the first of a set of already-merged inputs.
-        """
-        return all([
-            self.get_merged_indicators() is not None,
-            self == inputs[0],
-            self.previously_merged_inputs == inputs,
-            self.num_previously_merged_inputs == len(inputs),
-        ])
-
-
-    def get_merged_indicators(self):
-        """Return a set of already-merged indicators.
-
-        Returns
-        -------
-        dict or None
-            Dict of Indicator objects keyed by id, if available, else None.
-        """
-        return self.merged_indicators
-
-
-    def set_merged_indicators(self, merged_indicators, inputs):
-        """Set merged indicators for later retrieval.
-
-        Parameters
-        ----------
-        merged_indicators : dict
-            Dict of Indicator objects keyed by id.
-        inputs : list
-            List of InputBase subclasses.
-        """
-        self.merged_indicators = merged_indicators
-        self.previously_merged_inputs = inputs
-        self.num_previously_merged_inputs = len(inputs)
-
-
-    def apply_column_map(self, data):
-        if self.column_map is not None:
-            column_map=pd.read_csv(self.column_map)
-            column_dict = dict(zip(column_map['Text'], column_map['Value']))
-            data.rename(columns=column_dict, inplace=True)
-        return data
-
-
-    def apply_code_map(self, data):
-        if self.code_map is not None:
-            code_map=pd.read_csv(self.code_map)
-            code_dict = {}
-            for _, row in code_map.iterrows():
-                if row['Dimension'] not in code_dict:
-                    code_dict[row['Dimension']] = {}
-                code_dict[row['Dimension']][row['Text']] = row['Value']
-            data.replace(to_replace=code_dict, value=None, inplace=True)
-        return data

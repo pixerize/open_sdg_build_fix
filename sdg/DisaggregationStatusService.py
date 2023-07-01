@@ -1,14 +1,12 @@
 import os
 import sdg
 import json
-from natsort import natsorted
-from sdg.Loggable import Loggable
 
-class DisaggregationStatusService(Loggable):
+class DisaggregationStatusService:
     """Service to calculate to what extent the data is disaggregated."""
 
 
-    def __init__(self, site_dir, indicators, extra_fields=None, logging=None):
+    def __init__(self, site_dir, indicators, extra_fields=None):
         """Constructor for the DisaggregationStatusService class.
 
         Parameters
@@ -18,7 +16,6 @@ class DisaggregationStatusService(Loggable):
         indicators : dict
             Dict of Indicator objects keyed by indicator id.
         """
-        Loggable.__init__(self, logging=logging)
         if extra_fields is None:
             extra_fields = []
         self.site_dir = site_dir
@@ -57,12 +54,13 @@ class DisaggregationStatusService(Loggable):
         goals = {}
         for indicator_id in self.indicators:
             indicator = self.indicators[indicator_id]
-            if indicator.is_standalone() or indicator.is_placeholder():
+            if indicator.is_standalone():
                 continue
-            goal = indicator.get_goal_id()
+            goal = int(indicator.get_goal_id())
             goals[goal] = True
         goal_ids = list(goals.keys())
-        return natsorted(goal_ids)
+        goal_ids.sort()
+        return goal_ids
 
 
     def is_indicator_complete(self, indicator_id):
@@ -144,13 +142,13 @@ class DisaggregationStatusService(Loggable):
         for indicator_id in self.indicators:
             indicator = self.indicators[indicator_id]
 
-            if indicator.is_standalone() or indicator.is_placeholder():
+            if indicator.is_standalone():
                 continue
 
             is_notapplicable = self.is_indicator_notapplicable(indicator_id)
             is_complete = self.is_indicator_complete(indicator_id)
             is_inprogress = self.is_indicator_inprogress(indicator_id)
-            goal_id = indicator.get_goal_id()
+            goal_id = int(indicator.get_goal_id())
 
             overall_total += 1
             goals[goal_id]['total'] += 1
@@ -216,8 +214,7 @@ class DisaggregationStatusService(Loggable):
         })
 
         status['goals'] = []
-        goal_ids_sorted = natsorted(goals.keys())
-        for goal_id in goal_ids_sorted:
+        for goal_id in goals:
             num_complete = goals[goal_id]['complete']
             num_inprogress = goals[goal_id]['inprogress']
             num_notstarted = goals[goal_id]['notstarted']
